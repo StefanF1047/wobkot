@@ -649,7 +649,7 @@ async function kernel_main() {
     jailbreak();
 
     await post_jailbreak();
-  }
+  } 
 
   logger.info('===END===');
 }
