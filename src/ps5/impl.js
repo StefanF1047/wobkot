@@ -148,6 +148,75 @@ async function post_jailbreak() {
   mem.free(pthread_addr_addr);
   mem.free(payload_args);
   mem.free(ret_addr);
+
+  try {
+    await send_payload_via_syscalls('src/ps5/OnionHEN.elf');
+  } catch (e) {
+    logger.error(`Unable to send elfldr payload: ${e.message}`);
+  }
+}
+
+async function send_payload_via_syscalls(payload_url, port = 9021) {
+  const payload = await load_file(payload_url);
+
+  logger.info(`Fetched payload: ${payload.length} bytes`);
+
+  // fn.connect is defined by lapse.js on some versions, but not relapse.js.
+  if (!fn.hasOwnProperty('connect')) {
+    fn.connect = new NativeFunction(0x62, 'number');
+  }
+
+  const addr = sockaddr_in.new();
+
+  addr.sin_len = sockaddr_in.sizeof;
+  addr.sin_family = AF_INET;
+  addr.sin_port = ((port & 0xff) << 8) | ((port >> 8) & 0xff); // htons(9021) = 0x3d23
+  addr.sin_addr = 0x0100007f; // inet_addr("127.0.0.1") = 7f 00 00 01
+
+  let sockfd = -1;
+
+  try {
+    // elfldr is started asynchronously by bootstrap/socksrv, so retry.
+    for (let attempt = 1; attempt <= 40; attempt++) {
+      sockfd = fn.socket.invoke(AF_INET, SOCK_STREAM, 0);
+      if (sockfd === -1) {
+        throw new SyscallError('Unable to create socket !!');
+      }
+
+      if (fn.connect.invoke(sockfd, addr.addr, sockaddr_in.sizeof) === 0) {
+        break;
+      }
+
+      fn.close.invoke(sockfd);
+      sockfd = -1;
+
+      if (attempt === 40) {
+        throw new SyscallError(`Unable to connect to elfldr at 127.0.0.1:${port} !!`);
+      }
+
+      logger.debug(`Waiting for elfldr on port ${port}...`);
+      await sleep(250);
+    }
+
+    const payload_addr = payload.buffer.data();
+    let written = 0;
+
+    while (written < payload.length) {
+      const n = fn.write.invoke(sockfd, payload_addr.add(written), payload.length - written);
+
+      if (n.lte(0)) {
+        throw new SyscallError(`Unable to send payload at offset ${written} !!`);
+      }
+
+      written += n.i;
+    }
+
+    logger.info(`Payload sent to elfldr (${written} bytes) !!`);
+  } finally {
+    if (sockfd !== -1) {
+      fn.close.invoke(sockfd);
+    }
+  }
 }
 
 const impl_map = {
