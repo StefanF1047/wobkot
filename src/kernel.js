@@ -648,8 +648,6 @@ async function kernel_main() {
   if (fn.setuid.invoke(0) === -1) {
     jailbreak();
 
-    notify('Jailbroken !!');
-
     await post_jailbreak();
   }
 
