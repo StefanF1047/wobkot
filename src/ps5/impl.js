@@ -151,6 +151,7 @@ async function post_jailbreak() {
 
   try {
     await send_payload_via_syscalls('src/ps5/OnionHEN.elf');
+    await send_payload_via_syscalls('src/ps5/ftpsrv.elf');
   } catch (e) {
     logger.error(`Unable to send elfldr payload: ${e.message}`);
   }
